@@ -233,22 +233,21 @@ contract TokenGeyser is IStaking, Ownable {
         // Redeem from most recent stake and go backwards in time.
         uint256 stakingShareSecondsToBurn = 0;
         uint256 sharesLeftToBurn = stakingSharesToBurn;
-        uint256 rewardAmount = 0;
+        uint256 rewardAmount=0;
         while (sharesLeftToBurn > 0) {
             Stake storage lastStake = accountStakes[accountStakes.length - 1];
             uint256 stakeTimeSec = now.sub(lastStake.timestampSec);
+            rewardAmount=rewardAmount+(sharesLeftToBurn*(10/100*stakeTimeSec/2592000));
             uint256 newStakingShareSecondsToBurn = 0;
             if (lastStake.stakingShares <= sharesLeftToBurn) {
                 // fully redeem a past stake
                 newStakingShareSecondsToBurn = lastStake.stakingShares.mul(stakeTimeSec);
-                rewardAmount = computeNewReward(rewardAmount, newStakingShareSecondsToBurn, stakeTimeSec);
                 stakingShareSecondsToBurn = stakingShareSecondsToBurn.add(newStakingShareSecondsToBurn);
                 sharesLeftToBurn = sharesLeftToBurn.sub(lastStake.stakingShares);
                 accountStakes.length--;
             } else {
                 // partially redeem a past stake
                 newStakingShareSecondsToBurn = sharesLeftToBurn.mul(stakeTimeSec);
-                rewardAmount = computeNewReward(rewardAmount, newStakingShareSecondsToBurn, stakeTimeSec);
                 stakingShareSecondsToBurn = stakingShareSecondsToBurn.add(newStakingShareSecondsToBurn);
                 lastStake.stakingShares = lastStake.stakingShares.sub(sharesLeftToBurn);
                 sharesLeftToBurn = 0;
@@ -293,6 +292,9 @@ contract TokenGeyser is IStaking, Ownable {
      * @return Updated amount of distribution tokens to award, with any bonus included on the
      *         newly added tokens.
      */
+    /* 
+    Commenting this since There's no use of this function in Uniform APR
+    
     function computeNewReward(uint256 currentRewardTokens,
                                 uint256 stakingShareSeconds,
                                 uint256 stakeTimeSec) private view returns (uint256) {
@@ -313,7 +315,7 @@ contract TokenGeyser is IStaking, Ownable {
             .mul(newRewardTokens)
             .div(oneHundredPct);
         return currentRewardTokens.add(bonusedReward);
-    }
+    } */
 
     /**
      * @param addr The user to look up staking information for.
@@ -374,8 +376,8 @@ contract TokenGeyser is IStaking, Ownable {
             .add(newUserStakingShareSeconds);
         totals.lastAccountingTimestampSec = now;
 
-        uint256 totalUserRewards = (_totalStakingShareSeconds > 0)
-            ? totalUnlocked().mul(totals.stakingShareSeconds).div(_totalStakingShareSeconds)
+        uint256 totalUserRewards = (rewardAmount > 0)
+            ? totalUnlocked().sub(rewardAmount)
             : 0;
 
         return (
