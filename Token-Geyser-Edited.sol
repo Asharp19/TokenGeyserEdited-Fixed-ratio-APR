@@ -29,6 +29,7 @@ contract TokenGeyser is IStaking, Ownable {
     using SafeMath for uint256;
 
     event Staked(address indexed user, uint256 amount, uint256 total, bytes data);
+    event StakedLockFor(address indexed user, uint256 tenure, bytes data);
     event Unstaked(address indexed user, uint256 amount, uint256 total, bytes data);
     event TokensClaimed(address indexed user, uint256 amount);
     event TokensLocked(uint256 amount, uint256 durationSec, uint256 total);
@@ -78,6 +79,9 @@ contract TokenGeyser is IStaking, Ownable {
 
     // The collection of stakes for each user. Ordered by timestamp, earliest to latest.
     mapping(address => Stake[]) private _userStakes;
+    
+    // The Number of months locked for each stake of each user.
+    mapping(uint256 => Stake[]) private _eachStakeLockInMonths;
 
     //
     // Locked/Unlocked Accounting state
@@ -141,6 +145,15 @@ contract TokenGeyser is IStaking, Ownable {
      */
     function stake(uint256 amount, bytes calldata data) external {
         _stakeFor(msg.sender, msg.sender, amount);
+    }
+    
+    //User access to each stake Lock in period of choice, in Months.
+    function stakeLock(address user, _eachStakeLockInMonths) public returns(uint256){
+        uint256 TimeInSecs = (_eachStakeLockInMonths > 0 && _eachStakeLockInMonths<=12) 
+        ? _eachStakeLockInMonths*2592000 : 0;
+        
+        emit StakeLockFor(msg.sender, user, TimeInSecs, "");
+
     }
 
     /**
@@ -219,17 +232,42 @@ contract TokenGeyser is IStaking, Ownable {
     function _unstake(uint256 amount) private returns (uint256) {
         updateAccounting();
 
+        // Assigning an empty array to store timeperiod of Each Stake
+        Stake[] storage accountStakes2 = _userStakes[msg.sender];
+        
+        uint256[] EachStakeTimeinSecs;
+        
+        // Checking Unlock Eligibilty For each stake
+        while (accountStakes2.length>0){
+            Stake storage EachStakeTime=accountStakes2[accountStakes2.length - 1];
+            uint256 StakeTimePerStake= now.sub(EachStakeTime.timestampSec);
+            EachStakeTimeinSecs.push(StakeTimePerStake);
+            accountStakes2.length--;
+            }
+        uint256 VariableStore=0;
+
+        for (uint256 i = 0; i < Stake.length; i++){
+            if(EachStakeTimeinSecs[i]>=TimeInSecs){
+                VariableStore=EachStakeTimeinSecs[i]+VariableStore;
+            }
+            VariableStore += 0;
+        }
+
         // checks
+        require(VariableStore>0, 'Tokens are still in Lock in period');
         require(amount > 0, 'TokenGeyser: unstake amount is zero');
         require(totalStakedFor(msg.sender) >= amount,
             'TokenGeyser: unstake amount is greater than total user stakes');
         uint256 stakingSharesToBurn = totalStakingShares.mul(amount).div(totalStaked());
         require(stakingSharesToBurn > 0, 'TokenGeyser: Unable to unstake amount this small');
+        
+        
 
         // 1. User Accounting
         UserTotals storage totals = _userTotals[msg.sender];
         Stake[] storage accountStakes = _userStakes[msg.sender];
-
+        
+        
         // Redeem from most recent stake and go backwards in time.
         uint256 stakingShareSecondsToBurn = 0;
         uint256 sharesLeftToBurn = stakingSharesToBurn;
